@@ -1,0 +1,63 @@
+// Firestore Security Rules — Pisang Goreng Premium
+//
+// Cara pakai: Firebase Console > Firestore Database > Rules > tempel isi file
+// ini > Publish.
+//
+// Prinsip:
+//  - reviews   : siapa saja boleh membuat (create), tapi TIDAK boleh mengubah
+//                atau menghapus ulasan (update/delete selalu false) dari
+//                client. Yang tampil ke publik hanya yang isApproved == true.
+//                Ubah isApproved lewat Firebase Console (moderasi ringan).
+//  - suggestions: siapa saja boleh mengirim, tidak ada yang boleh membaca,
+//                mengubah, atau menghapus dari client (hanya lewat Console).
+//  - orders    : dipakai untuk statistik "Pesanan" saja. Boleh dibuat oleh
+//                siapa saja, dan boleh DIBACA (read) siapa saja karena tidak
+//                ada data pribadi pelanggan di sini (cuma itemCount, total,
+//                createdAt) — dipakai fetchStats() di reviewService.js untuk
+//                menghitung jumlah pesanan secara real dari client. Tidak
+//                boleh diubah atau dihapus dari client.
+//  - menu      : hanya bisa dibaca oleh siapa saja (untuk menampilkan menu),
+//                tidak bisa ditulis dari client (ubah lewat Firebase Console).
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /menu/{itemId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if resource.data.isApproved == true;
+      allow create: if request.resource.data.keys().hasAll(['name', 'rating', 'text', 'isApproved', 'createdAt'])
+                    && request.resource.data.isApproved == false
+                    && request.resource.data.rating is number
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 80
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() <= 600;
+      allow update, delete: if false;
+    }
+
+    match /suggestions/{suggestionId} {
+      allow create: if request.resource.data.keys().hasAll(['name', 'message', 'createdAt'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 80
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 800;
+      allow read, update, delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow create: if request.resource.data.keys().hasAll(['itemCount', 'total', 'createdAt'])
+                    && request.resource.data.itemCount is number
+                    && request.resource.data.total is number;
+      allow read: if true;
+      allow update, delete: if false;
+    }
+  }
+}
